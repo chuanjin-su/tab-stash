@@ -13,24 +13,6 @@
     >
       <OopsNotification key="oops" v-if="showCrashReport" />
       <Notification
-        key="new-features"
-        v-if="recently_updated === 'features'"
-        @activate="go('whats-new.html')"
-        @dismiss="hideWhatsNew"
-      >
-        Tab Stash {{ my_version }} has new sorting options and a refreshed
-        Chromium side-panel look. See what else is new!
-      </Notification>
-      <Notification
-        key="new-fixes"
-        v-if="recently_updated === 'fixes'"
-        @activate="go('whats-new.html')"
-        @dismiss="hideWhatsNew"
-      >
-        Tab Stash {{ my_version }} has new sorting options and a refreshed
-        Chromium side-panel look. See what else is new!
-      </Notification>
-      <Notification
         key="stash-root-warning"
         v-if="stash_root_warning"
         @activate="stash_root_warning!.help"
@@ -72,25 +54,6 @@
         <button @click.prevent="fetchMissingFavicons">
           <span>Fetch Missing Icons</span>
         </button>
-        <hr />
-        <a tabindex="0" href="https://josh-berry.github.io/tab-stash/tips.html"
-          ><span>Tips and Tricks</span></a
-        >
-        <a tabindex="0" href="https://github.com/josh-berry/tab-stash/wiki"
-          ><span>Wiki</span></a
-        >
-        <a
-          tabindex="0"
-          href="https://josh-berry.github.io/tab-stash/support.html"
-          ><span>Help and Support</span></a
-        >
-        <hr />
-        <a tabindex="0" :href="pageref('whats-new.html')"
-          ><span>What's New?</span></a
-        >
-        <a tabindex="0" href="https://github.com/sponsors/josh-berry"
-          ><span>Sponsor</span></a
-        >
       </Menu>
 
       <a
@@ -122,10 +85,7 @@
 
     <folder-list ref="stashed" v-if="stashRoot" :parentFolder="stashRoot" />
 
-    <footer class="page status-text">
-      Tab Stash {{ my_version }} &mdash;
-      <a :href="pageref('whats-new.html')">What's New</a>
-    </footer>
+    <footer class="page status-text">Tab Stash {{ my_version }}</footer>
   </main>
 
   <transition appear name="dialog">
@@ -158,7 +118,6 @@ import {fetchInfoForSites, type SiteInfo} from "../tasks/siteinfo.js";
 import {
   type OpenableURL,
   TaskMonitor,
-  parseVersion,
   urlToOpen,
   type TaskIterator,
 } from "../util/index.js";
@@ -230,17 +189,6 @@ export default defineComponent({
       const sr = the.model.bookmarks.stash_root.value;
       if (!sr) return undefined;
       return sr;
-    },
-
-    recently_updated(): undefined | "features" | "fixes" {
-      const last_notified = the.model.options.local.state.last_notified_version;
-      if (!last_notified || last_notified === this.my_version) return undefined;
-
-      const my = parseVersion(this.my_version);
-      const last = last_notified ? parseVersion(last_notified) : [];
-
-      if (my[0] == last[0] && my[1] == last[1]) return "fixes";
-      return "features";
     },
 
     recently_deleted() {
@@ -446,9 +394,6 @@ export default defineComponent({
 
     go(page: string) {
       window.location.href = pageref(page);
-    },
-    hideWhatsNew() {
-      the.model.options.local.set({last_notified_version: this.my_version});
     },
 
     showExportDialog() {

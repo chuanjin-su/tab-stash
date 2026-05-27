@@ -174,14 +174,6 @@ async function get_model(): Promise<M.Model> {
         model.attempt(() => configure_action(model));
       });
 
-      if (model.options.local.state.last_notified_version === undefined) {
-        model.attempt(async () =>
-          model.options.local.set({
-            last_notified_version: (await browser.management.getSelf()).version,
-          }),
-        );
-      }
-
       return model;
     })
     .catch(e => {

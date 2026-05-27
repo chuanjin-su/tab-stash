@@ -11,7 +11,6 @@ import stored_object, {
   aBoolean,
   anEnum,
   aNumber,
-  aString,
   maybeUndef,
   type StoredObject,
   type StorableType,
@@ -99,14 +98,6 @@ export const SYNC_DEF = {
 export type LocalModel = StoredObject<typeof LOCAL_DEF>;
 export type LocalState = LocalModel["state"];
 export const LOCAL_DEF = {
-  // What's the last version number at which we showed the user an update
-  // notification?  "undefined" = either a new install, or an upgrade from
-  // an older version which didn't have this option.
-  last_notified_version: {
-    default: undefined,
-    is: maybeUndef(aString),
-  },
-
   // What should we do with a tab once it's been stashed?
   after_stashing_tab: {
     default: "close",
