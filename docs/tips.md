@@ -8,7 +8,7 @@ _Find more usage tips and troubleshooting info, or add your own tips, on the
 ## Easy Access to the Side Panel
 
 For quick access to Tab Stash, use the toolbar button or right-click the toolbar
-button and choose "_Show Stashed Tabs in Side Panel_".
+button and choose "_Toggle Tab Stash in Side Panel_".
 
 You can also load the list of stashed tabs by right-clicking anywhere on the
 page, selecting "_Tab Stash_" from the context menu, and choosing "_Show
@@ -38,12 +38,12 @@ You can customize these shortcuts--[here's how][wiki-shortcuts].
 
 On **Mac**:
 
-- Show stashed tabs in side panel: _Ctrl+Shift+S_
+- Toggle Tab Stash in side panel: _Ctrl+Shift+S_
 - Toolbar action: _Ctrl+Shift+T_
 
 On **Windows**, **Linux** and other platforms:
 
-- Show stashed tabs in side panel: _Alt+Shift+S_
+- Toggle Tab Stash in side panel: _Alt+Shift+S_
 - Toolbar action: _Alt+Shift+T_
 
 ## Stashing Only Selected Tabs

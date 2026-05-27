@@ -509,13 +509,13 @@ export class Model {
       });
     }
 
-    // If a tab is closed and then a new one opened in quick succession, Firefox
-    // will sometimes send us a tab-creation event with an index that still
-    // assumes the prior tab is open--that is, the index will be one larger than
-    // what it should be. If the new tab is opened in the rightmost position
-    // (which is by far the most common case), then `tab.index ===
-    // win.children.length + 1`, resulting in a crash.  Avoid the crash by
-    // clamping tab.index to the window length if the window is fully-loaded.
+    // If a tab is closed and then a new one opened in quick succession, the
+    // browser can send us a tab-creation event with an index that still assumes
+    // the prior tab is open--that is, the index will be one larger than what it
+    // should be. If the new tab is opened in the rightmost position (which is
+    // by far the most common case), then `tab.index === win.children.length +
+    // 1`, resulting in a crash. Avoid the crash by clamping tab.index to the
+    // window length if the window is fully-loaded.
     // See #537.
     if (win.isLoaded) tab.index = Math.min(tab.index, win.children.length);
 
@@ -530,18 +530,12 @@ export class Model {
   whenTabUpdated(id: number, info: Tabs.OnUpdatedChangeInfoType) {
     trace("event tabUpdated", id, info.url, info);
     const t = this.tab(id as TabID);
-    /* c8 ignore start -- compensation for firefox inconsistency */
+    /* c8 ignore start -- compensation for browser event ordering */
     if (!t) {
-      // Firefox sometimes sends onUpdated events for a tab after it has been
-      // closed.  Worse, the usual technique of reloading the model breaks
-      // things even more, because the closed tab hasn't been cleared out of
-      // Firefox's internal state at the time we receive the onUpdated event, so
-      // browser.tabs.query() still returns the closed tab.  We work around this
-      // by simply ignoring onUpdated events for tabs we don't recognize.
-      // https://github.com/josh-berry/tab-stash/issues/321
-      console.warn(
-        `Got onUpdated event for an unknown tab ${id}; ignoring it.`,
-      );
+      // Browsers can send onUpdated events for tabs that closed before the
+      // model observed the update. This is expected, so don't use console.warn
+      // here; Chrome surfaces extension warnings as user-visible errors.
+      trace("Ignoring onUpdated event for an unknown tab", id, info);
       return;
     }
     /* c8 ignore stop */
@@ -573,19 +567,19 @@ export class Model {
   whenTabMoved(tabId: number, info: {windowId: number; toIndex: number}) {
     trace("event tabMoved", tabId, info);
     const t = this.tab(tabId as TabID);
-    /* c8 ignore next 4 -- compensation for firefox inconsistency */
+    /* c8 ignore next 4 -- compensation for browser event ordering */
     if (!t) {
-      console.warn(`Got move event for unknown tab ${tabId}`);
+      trace("Ignoring move event for unknown tab", tabId, info);
       return;
     }
 
-    /* c8 ignore start -- compensation for firefox inconsistency */
+    /* c8 ignore start -- compensation for browser event ordering */
     let newWindow = this.window(info.windowId as WindowID);
     if (!newWindow) {
-      // Sometimes Firefox sends tabAttached (aka tabMoved) events before
-      // (or instead of) the window-creation event itself.  This usually
-      // happens when tearing a tab off of an existing window to make a
-      // new window.  Handle this by synthesizing a new window.
+      // Sometimes browsers send tabAttached (aka tabMoved) events before
+      // (or instead of) the window-creation event itself. This usually happens
+      // when tearing a tab off of an existing window to make a new window.
+      // Handle this by synthesizing a new window.
       //
       // There's unfortunately no way to synthesize this in a unit test
       // because it would require the WebExtension API to allow us to move
@@ -606,9 +600,9 @@ export class Model {
   whenTabReplaced(newId: number, oldId: number) {
     trace("event tabReplaced", oldId, "=>", newId);
     const t = this.tab(oldId as TabID);
-    /* c8 ignore next 4 -- compensation for firefox inconsistency */
+    /* c8 ignore next 4 -- compensation for browser event ordering */
     if (!t) {
-      console.warn(`Got replace event for unknown tab ${oldId} (-> ${newId})`);
+      trace("Ignoring replace event for unknown tab", oldId, newId);
       return;
     }
 
@@ -620,9 +614,9 @@ export class Model {
   whenTabActivated(info: Tabs.OnActivatedActiveInfoType) {
     trace("event tabActivated", info.tabId, info);
     const tab = this.tab(info.tabId as TabID);
-    /* c8 ignore next 4 -- compensation for firefox inconsistency */
+    /* c8 ignore next 4 -- compensation for browser event ordering */
     if (!tab) {
-      console.warn(`Got activated event for unknown tab ${info.tabId}`);
+      trace("Ignoring activated event for unknown tab", info.tabId, info);
       return;
     }
 
@@ -637,9 +631,9 @@ export class Model {
   whenTabsHighlighted(info: Tabs.OnHighlightedHighlightInfoType) {
     trace("event tabsHighlighted", info);
     const win = this.window(info.windowId as WindowID);
-    /* c8 ignore next 4 -- compensation for firefox inconsistency */
+    /* c8 ignore next 4 -- compensation for browser event ordering */
     if (!win) {
-      console.log(`Got highlighted event for unknown window ${info.windowId}`);
+      trace("Ignoring highlighted event for unknown window", info.windowId);
       return;
     }
 

@@ -14,6 +14,7 @@ const GC_ALARM = "tab-stash-gc";
 const DAY_IN_MINUTES = 24 * 60;
 
 let model_promise: Promise<M.Model> | undefined;
+const side_panel_open_windows = new Set<number>();
 
 browser.runtime.onInstalled.addListener(
   asyncEvent(async details => {
@@ -54,7 +55,7 @@ browser.action.onClicked.addListener(
   asyncEvent(async tab => {
     const is_side_panel = cached_browser_action_show === "side_panel";
     if (is_side_panel) {
-      open_side_panel(tab).catch(console.error);
+      toggle_side_panel(tab).catch(console.error);
     }
 
     const model = await get_model();
@@ -80,17 +81,7 @@ browser.action.onClicked.addListener(
 browser.commands.onCommand.addListener(
   asyncEvent(async (command, tab) => {
     if (command === "show_side_panel") {
-      open_side_panel(tab).catch(console.error);
-      return;
-    }
-    const model = await get_model();
-    switch (command) {
-      case "show_side_panel":
-        await commands(model).show_side_panel(
-          tab?.id ? model.tabs.tab(tab.id) : undefined,
-          tab,
-        );
-        break;
+      toggle_side_panel(tab).catch(console.error);
     }
   }),
 );
@@ -99,7 +90,7 @@ browser.contextMenus.onClicked.addListener(
   asyncEvent(async (info, tab) => {
     const cmd = String(info.menuItemId).replace(/^[^:]*:/, "");
     if (cmd === "show_side_panel") {
-      open_side_panel(tab).catch(console.error);
+      toggle_side_panel(tab).catch(console.error);
       return;
     }
     if (
@@ -158,6 +149,7 @@ browser.storage.onChanged.addListener(
 
 void ensure_alarms();
 void configure_side_panel();
+void track_side_panel_state();
 void get_model();
 
 async function get_model(): Promise<M.Model> {
@@ -283,8 +275,9 @@ function create_context_menus() {
       "main:",
       ["page", "frame", "selection", "link", "editable", "image", "video"],
       [
+        ["show_popup", "Open Popup"],
         ["show_tab", "Show Stashed Tabs in a Tab"],
-        ["show_side_panel", "Show Stashed Tabs in Side Panel"],
+        ["show_side_panel", "Toggle Tab Stash in Side Panel"],
         ["", ""],
         ["stash_all", "Stash Tabs"],
         ["stash_one", "Stash This Tab"],
@@ -302,8 +295,9 @@ function create_context_menus() {
       "action:",
       ["action"],
       [
+        ["show_popup", "Open Popup"],
         ["show_tab", "Show Stashed Tabs in a Tab"],
-        ["show_side_panel", "Show Stashed Tabs in Side Panel"],
+        ["show_side_panel", "Toggle Tab Stash in Side Panel"],
         ["", ""],
         ["stash_all", "Stash Tabs"],
         ["copy_all", "Copy Tabs to Stash"],
@@ -354,7 +348,7 @@ function commands(model: M.Model): {
 } {
   return {
     show_side_panel: async (_t?: Tab, bt?: BrowserTabs.Tab) => {
-      await open_side_panel(bt);
+      await toggle_side_panel(bt);
     },
 
     async show_popup() {
@@ -510,21 +504,96 @@ async function gc(model: M.Model) {
   });
 }
 
-async function open_side_panel(tab?: BrowserTabs.Tab) {
+function open_side_panel(tab?: BrowserTabs.Tab): Promise<void> {
   const side_panel = chrome_side_panel();
   if (!side_panel?.open) {
-    throw new Error("Chrome side panel API is not available");
+    return Promise.reject(new Error("Chrome side panel API is not available"));
   }
 
-  const windowId = tab?.windowId ?? (await browser.windows.getCurrent()).id;
-  await side_panel.open({windowId});
+  const context = side_panel_context(tab);
+  if (!context) {
+    return Promise.reject(new Error("Cannot determine side panel context"));
+  }
+
+  const opened = side_panel.open(context);
+  if (context.windowId !== undefined) {
+    set_side_panel_open(context.windowId, true);
+  }
+  return opened;
+}
+
+function toggle_side_panel(tab?: BrowserTabs.Tab): Promise<void> {
+  const side_panel = chrome_side_panel();
+  if (!side_panel?.open) {
+    return Promise.reject(new Error("Chrome side panel API is not available"));
+  }
+
+  const context = side_panel_context(tab);
+  if (!context) {
+    return Promise.reject(new Error("Cannot determine side panel context"));
+  }
+
+  const windowId = context.windowId;
+  if (
+    windowId !== undefined &&
+    side_panel_open_windows.has(windowId) &&
+    side_panel.close
+  ) {
+    const closed = side_panel.close(context);
+    set_side_panel_open(windowId, false);
+    return closed;
+  }
+
+  const opened = side_panel.open(context);
+  if (windowId !== undefined) set_side_panel_open(windowId, true);
+  return opened;
+}
+
+function track_side_panel_state() {
+  const side_panel = chrome_side_panel();
+  side_panel?.onOpened?.addListener(info => {
+    set_side_panel_open(info.windowId, true);
+  });
+  side_panel?.onClosed?.addListener(info => {
+    set_side_panel_open(info.windowId, false);
+  });
+}
+
+function side_panel_context(
+  tab?: BrowserTabs.Tab,
+): SidePanelContext | undefined {
+  if (tab?.windowId !== undefined) return {windowId: tab.windowId};
+  if (tab?.id !== undefined) return {tabId: tab.id};
+
+  const windowId = chrome_current_window_id();
+  return windowId === undefined ? undefined : {windowId};
+}
+
+function set_side_panel_open(windowId: number, open: boolean) {
+  if (open) side_panel_open_windows.add(windowId);
+  else side_panel_open_windows.delete(windowId);
 }
 
 function chrome_side_panel(): SidePanelAPI | undefined {
   return (<any>globalThis).chrome?.sidePanel;
 }
 
+function chrome_current_window_id(): number | undefined {
+  const windowId = (<any>globalThis).chrome?.windows?.WINDOW_ID_CURRENT;
+  return typeof windowId === "number" ? windowId : undefined;
+}
+
 type SidePanelAPI = {
-  open(options: {windowId?: number; tabId?: number}): Promise<void>;
+  open(options: SidePanelContext): Promise<void>;
+  close?(options: SidePanelContext): Promise<void>;
   setPanelBehavior?(options: {openPanelOnActionClick: boolean}): Promise<void>;
+  onOpened?: SidePanelEvent;
+  onClosed?: SidePanelEvent;
+};
+
+type SidePanelContext = {windowId?: number; tabId?: number};
+type SidePanelEvent = {
+  addListener(
+    callback: (info: {windowId: number; tabId?: number}) => void,
+  ): void;
 };

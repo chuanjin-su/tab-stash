@@ -52,7 +52,7 @@
       }
     },
     "show_side_panel": {
-      "description": "Show Tab Stash in the side panel",
+      "description": "Toggle Tab Stash in the side panel",
       "suggested_key": {
         "default": "Alt+Shift+S",
         "mac": "MacCtrl+Shift+S"
