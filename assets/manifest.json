@@ -41,7 +41,8 @@
     "default_path": "stash-list.html?view=side_panel"
   },
   "options_ui": {
-    "page": "options.html"
+    "page": "options.html",
+    "open_in_tab": true
   },
   "commands": {
     "_execute_action": {

@@ -16,11 +16,15 @@ const DAY_IN_MINUTES = 24 * 60;
 let model_promise: Promise<M.Model> | undefined;
 
 browser.runtime.onInstalled.addListener(
-  asyncEvent(async () => {
+  asyncEvent(async details => {
     create_context_menus();
     await ensure_alarms();
     await configure_side_panel();
-    await get_model();
+
+    const model = await get_model();
+    if (details.reason === "install" || needs_setup(model)) {
+      show_setup_page(model);
+    }
   }),
 );
 
@@ -57,7 +61,7 @@ browser.action.onClicked.addListener(
     const opts = model.options.sync.state;
 
     // Special case so the user doesn't think Tab Stash is broken.
-    if (!opts.browser_action_show || !opts.browser_action_stash) {
+    if (needs_toolbar_setup(model)) {
       show_setup_page(model);
       return;
     }
@@ -259,6 +263,20 @@ async function ensure_alarms() {
   });
 }
 
+function needs_setup(model: M.Model): boolean {
+  const opts = model.options.sync.state;
+  return (
+    !opts.browser_action_show ||
+    !opts.browser_action_stash ||
+    !opts.open_stash_in
+  );
+}
+
+function needs_toolbar_setup(model: M.Model): boolean {
+  const opts = model.options.sync.state;
+  return !opts.browser_action_show || !opts.browser_action_stash;
+}
+
 function create_context_menus() {
   browser.contextMenus.removeAll().then(() => {
     menu(
@@ -275,6 +293,7 @@ function create_context_menus() {
         ["copy_all", "Copy Tabs to Stash"],
         ["copy_one", "Copy This Tab to Stash"],
         ["", ""],
+        ["setup", "Set Up Tab Stash..."],
         ["options", "Options..."],
       ],
     );
@@ -288,6 +307,9 @@ function create_context_menus() {
         ["", ""],
         ["stash_all", "Stash Tabs"],
         ["copy_all", "Copy Tabs to Stash"],
+        ["", ""],
+        ["setup", "Set Up Tab Stash..."],
+        ["options", "Options..."],
       ],
     );
   });
@@ -387,7 +409,11 @@ function commands(model: M.Model): {
     },
 
     async options() {
-      await browser.runtime.openOptionsPage();
+      show_options_page(model);
+    },
+
+    async setup() {
+      show_setup_page(model);
     },
   };
 }
@@ -457,6 +483,20 @@ function show_setup_page(model: M.Model) {
         {
           title: "Tab Stash - Setup",
           url: browser.runtime.getURL("setup.html"),
+        },
+      ],
+      {},
+    ),
+  );
+}
+
+function show_options_page(model: M.Model) {
+  model.attempt(() =>
+    model.restoreTabs(
+      [
+        {
+          title: "Tab Stash - Options",
+          url: browser.runtime.getURL("options.html"),
         },
       ],
       {},
