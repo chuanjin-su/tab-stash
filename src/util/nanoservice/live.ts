@@ -26,14 +26,32 @@ const trace = trace_fn("nano_port", globalThis?.location?.pathname);
 
 export class SvcRegistry {
   private services = new Map<string, NanoService<Send, Send>>();
+  private pending = new Map<string, RTPort[]>();
+  private listening = false;
   private listener = (port: RTPort) => {
     const svc = this.services.get(port.name);
     if (!svc) {
-      // Probably intended for another audience.
-      trace(`[listener] ignored connection for ${port.name}`);
+      trace(`[listener] queueing connection for ${port.name}`);
+      const pending = this.pending.get(port.name) ?? [];
+      pending.push(port);
+      this.pending.set(port.name, pending);
       return;
     }
 
+    this.accept(port, svc);
+  };
+
+  constructor() {
+    this.startListening();
+  }
+
+  private startListening() {
+    if (this.listening) return;
+    browser.runtime.onConnect.addListener(this.listener);
+    this.listening = true;
+  }
+
+  private accept(port: RTPort, svc: NanoService<Send, Send>) {
     ++listener_count;
     const nport = new Port<Send, Send>(`${port.name}<${listener_count}`, port);
     nport.onDisconnect = () => {
@@ -50,11 +68,13 @@ export class SvcRegistry {
 
     trace(`[listener] Accepted connection for ${port.name} as ${nport.name}`);
     if (svc.onConnect) svc.onConnect(nport);
-  };
+  }
 
   reset_testonly() {
     this.services.clear();
+    this.pending.clear();
     browser.runtime.onConnect.removeListener(this.listener);
+    this.listening = false;
   }
 
   register(name: string, svc: NanoService<Send, Send>) {
@@ -65,15 +85,11 @@ export class SvcRegistry {
 
     trace("[listener] listening for service", name);
     this.services.set(name, svc);
+    this.startListening();
 
-    /* c8 ignore next -- Firefox bug workaround */
-    if (this.services.size == 1) {
-      // We wait to start listening until the first service is actually
-      // registered, because of Firefox bug 1465514--listening for ANY
-      // connections and then dropping a connection may result in other,
-      // unrelated connections getting spuriously dropped.
-      browser.runtime.onConnect.addListener(this.listener);
-    }
+    const pending = this.pending.get(name) ?? [];
+    this.pending.delete(name);
+    for (const port of pending) this.accept(port, svc);
   }
 }
 

@@ -921,7 +921,7 @@
           keyboard shortcuts are as follows:</L
         >
         <ul>
-          <li>Show stashed tabs in sidebar: <em>Ctrl+Alt+S</em></li>
+          <li>Show stashed tabs in sidebar: <em>Alt+Shift+S</em></li>
           <li>Stash all open tabs: <em>Ctrl+Alt+T</em></li>
           <li>Stash the active tab: <em>Ctrl+Alt+W</em></li>
         </ul>

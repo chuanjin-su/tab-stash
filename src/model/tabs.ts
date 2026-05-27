@@ -47,9 +47,6 @@ export type TabID = number & {readonly __tab_id: unique symbol};
 
 const trace = trace_fn("tabs");
 
-/** The key of the stashed tab's bookmark ID in the browser's session store. */
-export const SK_HIDDEN_BY_TAB_STASH = "hidden_by_tab_stash";
-
 /** How many tabs do we want to allow to be loaded at once?  (NOTE: This is
  * approximate, since the model may not be fully up to date, and the user can
  * always trigger tab loading on their own.) */
@@ -246,15 +243,6 @@ export class Model {
     return index;
   }
 
-  /** Checks if the tab was hidden by us or by some other extension. */
-  async wasTabHiddenByUs(tab: Tab): Promise<boolean> {
-    const res = await browser.sessions.getTabValue(
-      tab.id,
-      SK_HIDDEN_BY_TAB_STASH,
-    );
-    return res ?? false;
-  }
-
   //
   // User-level operations on tabs
   //
@@ -266,54 +254,14 @@ export class Model {
   async create(tab: browser.Tabs.CreateCreatePropertiesType): Promise<Tab> {
     const create_tab = Object.assign({}, tab);
 
-    if (!browser.tabs.hide || !tab.url || tab.url.startsWith("about:")) {
-      // This is Chrome; it doesn't support discarded tabs, so we can only load
-      // so many at once.  This is a little awkward because to the user, it will
-      // look like there is a big delay in opening tabs.
-      //
-      // (It could also be Firefox, which doesn't support creating discarded
-      // `about:` tabs.)
-      delete create_tab.discarded;
-      delete create_tab.title;
-      return await this._loading_queue.run(async () => {
-        await this._safe_to_load_another_tab();
-        trace("creating tab", create_tab);
-        const t = await browser.tabs.create(create_tab);
-        return await shortPoll(
-          () => this.tabs.get(t.id as TabID) || tryAgain(),
-        );
-      });
-    }
-
-    // This is Firefox; it DOES support discarded tabs. We can be fancier and
-    // create the discarded tab immediately, and then try to load it in the
-    // background only if it's "safe" (i.e. the user's machine can handle it).
-    create_tab.discarded = true;
-
-    // Create the tab and find its equivalent in the model
-    trace("creating tab", create_tab);
-    const t = await browser.tabs.create(create_tab);
-    const m = await shortPoll(() => this.tabs.get(t.id as TabID) || tryAgain());
-
-    // If the caller requested that we load the tab, do so as soon as we
-    // can--but don't try to load too many at once so we don't overwhelm the
-    // user's machine.
-    if (!tab.discarded) {
-      this._loading_queue.run(async () => {
-        await this._safe_to_load_another_tab();
-        if (this.tabs.get(m.id) !== m) return; // Tab was closed
-        if (!m.discarded) return; // Tab was already loaded
-
-        // Load the tab if it's still discarded.
-        trace("loading tab after creation", create_tab);
-        await browser.tabs.update(m.id, {url: m.url});
-        await shortPoll(
-          () => this.tabs.get(m.id) !== m || !m.discarded || tryAgain(),
-        );
-      });
-    }
-
-    return m;
+    delete create_tab.discarded;
+    delete create_tab.title;
+    return await this._loading_queue.run(async () => {
+      await this._safe_to_load_another_tab();
+      trace("creating tab", create_tab);
+      const t = await browser.tabs.create(create_tab);
+      return await shortPoll(() => this.tabs.get(t.id as TabID) || tryAgain());
+    });
   }
 
   /** Moves a tab such that it precedes the item with index `toIndex` in
@@ -321,8 +269,7 @@ export class Model {
    * windows's tab list to move the item to the end of the window.) */
   async move(tab: Tab, toWindow: Window, toIndex: number): Promise<void> {
     // This method mainly exists to provide consistent behavior between
-    // bookmarks.move() and tabs.move(). Unlike browser.bookmarks.move(),
-    // browser.tabs.move() behaves the same on both Firefox and Chrome.
+    // bookmarks.move() and tabs.move().
     const pos = tab.position;
     if (pos?.parent === toWindow && toIndex > pos.index) toIndex--;
 
@@ -335,36 +282,11 @@ export class Model {
     });
   }
 
-  /** Shows a tab that was previously hidden. */
-  async show(tab: Tab): Promise<void> {
-    await browser.tabs.show(tab.id);
-    // We expect SK_HIDDEN_BY_TAB_STASH to be cleared automatically by
-    // whenTabUpdated().  We do it there, instead of here, because some other
-    // extension or the user could have un-hid the tab without going thru us.
-  }
-
-  /** Hides the specified tabs, optionally discarding them (to free up memory).
-   * If the browser does not support hiding tabs, closes them instead. */
+  /** Closes stashed tabs. Retained as a method name for callers that do not
+   * care whether the browser supports hidden tabs. */
   async hide(tabs: Tab[], discard?: "discard"): Promise<void> {
-    if (!!browser.tabs.hide) {
-      const tids = tabs.map(t => t.id);
-      trace("hiding tabs", tabs);
-      await this.refocusAwayFromTabs(tabs);
-
-      try {
-        await browser.tabs.hide(tids);
-        if (discard) await browser.tabs.discard(tids);
-
-        for (const t of tabs) {
-          await browser.sessions.setTabValue(t.id, SK_HIDDEN_BY_TAB_STASH, true);
-        }
-      } catch (e) {
-        console.warn("browser.tabs.hide failed, falling back to remove", e);
-        await this.remove(tabs);
-      }
-    } else {
-      await this.remove(tabs);
-    }
+    void discard;
+    await this.remove(tabs);
   }
 
   /** Close the specified tabs, but leave the browser window open (and create
@@ -372,14 +294,18 @@ export class Model {
   async remove(tabs: Tab[]): Promise<void> {
     const tids = tabs.map(t => t.id);
     trace("removing tabs", tids);
-    if (!!browser.tabs.hide) {
-      await this.refocusAwayFromTabs(tabs);
-    }
     try {
       await browser.tabs.remove(tids);
     } catch (e) {
-      console.warn("browser.tabs.remove with array failed, trying individually", e);
-      await Promise.all(tids.map(tid => browser.tabs.remove(tid).catch(err => console.warn(err))));
+      console.warn(
+        "browser.tabs.remove with array failed, trying individually",
+        e,
+      );
+      await Promise.all(
+        tids.map(tid =>
+          browser.tabs.remove(tid).catch(err => console.warn(err)),
+        ),
+      );
     }
     await shortPoll(() => {
       if (tids.find(tid => this.tabs.has(tid)) !== undefined) tryAgain();
@@ -633,18 +559,7 @@ export class Model {
     }
     if (info.favIconUrl !== undefined) t.favIconUrl = info.favIconUrl;
     if (info.pinned !== undefined) t.pinned = info.pinned;
-    if (info.hidden !== undefined) {
-      if (t.hidden !== info.hidden && !info.hidden) {
-        // We must clear the "hidden by Tab Stash" flag because somebody (could
-        // have been us or someone else) un-hid this tab, and if the tab is
-        // hidden again later by some other extension, we don't want to believe
-        // it was hidden by Tab Stash.
-        logErrorsFrom(() =>
-          browser.sessions.removeTabValue(t.id, SK_HIDDEN_BY_TAB_STASH),
-        );
-      }
-      t.hidden = info.hidden;
-    }
+    if (info.hidden !== undefined) t.hidden = info.hidden;
     if (info.discarded !== undefined) t.discarded = info.discarded;
   }
 

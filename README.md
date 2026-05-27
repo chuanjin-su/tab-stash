@@ -16,9 +16,9 @@ restore just the tabs or groups you want.
 
 ## Want to give it a try?
 
-Install Tab Stash from [Mozilla Add-Ons][amo]!
-
-[amo]: https://addons.mozilla.org/firefox/addon/tab-stash/
+This fork targets Chromium-based browsers. Build the extension locally and load
+the `dist` directory as an unpacked extension while Chrome Web Store packaging
+is being prepared.
 
 ## Build and Packaging Instructions
 
@@ -30,7 +30,7 @@ welcome). Here's what you need to do:
 1. Install dependencies. You can use the handy `install-deps.sh` script to do
    it automatically on supported OSes/distros (latest macOS and Ubuntu 22.04 are
    known to work). Or if you prefer to do it manually, install the following:
-   - GNU `make`, `git`, `diff`, `patch`, `rsync`, `zip` (plus the usual set of
+   - GNU `make`, `git`, `diff`, `patch`, `zip` (plus the usual set of
      standard UNIX utilities like `mkdir`, `sed`, etc.)
 
    - Node.js and `npm` (the latest "Current" or "LTS" release)
@@ -46,22 +46,18 @@ welcome). Here's what you need to do:
    1. Make sure your source tree has no uncommitted changes (`git status` should
       say, `nothing to commit, working tree clean`).
 
-   2. `git checkout` the tag for the version you want to build. (Mozilla
-      reviewers, you can skip this step--the provided source bundle should
-      already have the correct tag checked out.)
+   2. `git checkout` the tag for the version you want to build.
 
    3. Run `make rel`. (You can use `-j<...>` if you want for a parallel build.)
 
 4. You'll get the following artifacts:
-   - `dist`: The unpacked Firefox extension
-
-   - `dist-chrome`: A highly-experimental port to Chrome (also unpacked)
+   - `dist`: The unpacked Chromium MV3 extension
 
    - (release builds only) `releases/tab-stash-X.XX-hhhhhhh.zip`: The packed
-     Firefox extension (this is what gets uploaded to AMO)
+     Chromium extension
 
    - (release builds only) `releases/tab-stash-src-X.XX-hhhhhhh.tar.gz`: A clean
-     git checkout of the source tree for the release (also for uploading to AMO)
+     git checkout of the source tree for the release
 
 ## Want to help out?
 

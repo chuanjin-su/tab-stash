@@ -159,62 +159,6 @@ describe("model", () => {
         );
       }
     });
-
-    describe("hidden tabs", () => {
-      it("leaves stashed tabs alone", async () => {
-        await browser.sessions.setTabValue(
-          env.tabs.real_doug_2.id,
-          M.Tabs.SK_HIDDEN_BY_TAB_STASH,
-          true,
-        );
-
-        await env.model.closeOrphanedHiddenTabs();
-
-        const hidden = await browser.tabs.query({hidden: true});
-        expect(hidden.map(t => t.id!)).to.deep.equal([
-          env.tabs.small_hidden.id,
-          env.tabs.real_doug_2.id,
-          env.tabs.real_harry.id,
-          env.tabs.real_helen.id,
-        ]);
-      });
-
-      it("closes orphaned stashed tabs", async () => {
-        await browser.sessions.setTabValue(
-          env.tabs.real_doug_2.id,
-          M.Tabs.SK_HIDDEN_BY_TAB_STASH,
-          true,
-        );
-
-        await browser.bookmarks.remove(env.bookmarks.doug_2.id);
-        while (
-          env.model.bookmarks.node(env.bookmarks.doug_2.id) !== undefined
-        ) {
-          await new Promise(r => setTimeout(r));
-        }
-
-        await env.model.closeOrphanedHiddenTabs();
-
-        const hidden = await browser.tabs.query({hidden: true});
-        expect(hidden.map(t => t.id!)).to.deep.equal([
-          env.tabs.small_hidden.id,
-          env.tabs.real_harry.id,
-          env.tabs.real_helen.id,
-        ]);
-      });
-
-      it("leaves tabs hidden by other extensions alone", async () => {
-        await env.model.closeOrphanedHiddenTabs();
-
-        const hidden = await browser.tabs.query({hidden: true});
-        expect(hidden.map(t => t.id!)).to.deep.equal([
-          env.tabs.small_hidden.id,
-          env.tabs.real_doug_2.id,
-          env.tabs.real_harry.id,
-          env.tabs.real_helen.id,
-        ]);
-      });
-    });
   });
 
   describe("choosing stashable tabs in a window", () => {
@@ -260,194 +204,33 @@ describe("model", () => {
     });
   });
 
-  describe("hides or closes stashed tabs", () => {
-    describe("according to user settings", () => {
-      it("hides tabs but keeps them loaded", async () => {
-        await env.model.options.local.set({after_stashing_tab: "hide"});
-        await events.next(browser.storage.onChanged);
-        await events.next(browser.storage.local.onChanged);
-        await events.next(env.model.options.local.onChanged);
-        expect(env.model.options.local.state.after_stashing_tab).to.equal(
-          "hide",
-        );
-
-        await env.model.hideOrCloseStashedTabs([
-          env.model.tabs.tab(env.tabs.right_doug.id)!,
-        ]);
-        await events.next(browser.tabs.onUpdated); // hidden
-
-        const t = await browser.tabs.get(env.tabs.right_doug.id);
-        expect(t).to.deep.include({
-          url: env.tabs.right_doug.url,
-          hidden: true,
-        });
-        expect(env.model.tabs.tab(env.tabs.right_doug.id)).to.deep.include({
-          url: env.tabs.right_doug.url,
-          hidden: true,
-        });
-        expect(env.model.tabs.tab(env.tabs.right_doug.id)!.discarded).not.to.be
-          .ok;
-
-        const bm_id = await browser.sessions.getTabValue(
-          env.tabs.right_doug.id,
-          M.Tabs.SK_HIDDEN_BY_TAB_STASH,
-        );
-        expect(bm_id).to.equal(true);
-      });
-
-      it("hides and unloads tabs", async () => {
-        await env.model.options.local.set({after_stashing_tab: "hide_discard"});
-        await events.next(browser.storage.onChanged);
-        await events.next(browser.storage.local.onChanged);
-        await events.next(env.model.options.local.onChanged);
-        expect(env.model.options.local.state.after_stashing_tab).to.equal(
-          "hide_discard",
-        );
-
-        await env.model.hideOrCloseStashedTabs([
-          env.model.tabs.tab(env.tabs.right_doug.id)!,
-        ]);
-        await events.next(browser.tabs.onUpdated); // hidden
-        await events.next(browser.tabs.onUpdated); // discarded
-
-        expect(await browser.tabs.get(env.tabs.right_doug.id)).to.deep.include({
-          url: env.tabs.right_doug.url,
-          hidden: true,
-          discarded: true,
-        });
-        expect(env.model.tabs.tab(env.tabs.right_doug.id)).to.deep.include({
-          url: env.tabs.right_doug.url,
-          hidden: true,
-          discarded: true,
-        });
-
-        const bm_id = await browser.sessions.getTabValue(
-          env.tabs.right_doug.id,
-          M.Tabs.SK_HIDDEN_BY_TAB_STASH,
-        );
-        expect(bm_id).to.equal(true);
-      });
-
-      it("closes tabs", async () => {
-        await env.model.options.local.set({after_stashing_tab: "close"});
-        await events.next(browser.storage.onChanged);
-        await events.next(browser.storage.local.onChanged);
-        await events.next(env.model.options.local.onChanged);
-        expect(env.model.options.local.state.after_stashing_tab).to.equal(
-          "close",
-        );
-
-        const p = env.model.hideOrCloseStashedTabs([
-          env.model.tabs.tab(env.tabs.right_doug.id)!,
-        ]);
-        await events.next(browser.tabs.onRemoved);
-        await p;
-
-        await browser.tabs.get(env.tabs.right_doug.id).then(
-          /* c8 ignore next -- bug-checking */
-          () => expect.fail("browser.tabs.get did not throw"),
-          () => {},
-        );
-        expect(env.model.tabs.tab(env.tabs.right_doug.id)).to.be.undefined;
-      });
-    });
-
-    it("opens a new empty tab if needed to keep the window open", async () => {
-      await env.model.options.local.set({after_stashing_tab: "hide"});
+  describe("closes stashed tabs", () => {
+    it("normalizes legacy hide settings to close", async () => {
+      await env.model.options.local.set({after_stashing_tab: "hide" as any});
       await events.next(browser.storage.onChanged);
       await events.next(browser.storage.local.onChanged);
       await events.next(env.model.options.local.onChanged);
-      expect(env.model.options.local.state.after_stashing_tab).to.equal("hide");
-
-      await env.model.hideOrCloseStashedTabs(
-        [
-          env.tabs.left_alice.id,
-          env.tabs.left_betty.id,
-          env.tabs.left_charlotte.id,
-        ].map(id => env.model.tabs.tab(id)!),
+      expect(env.model.options.local.state.after_stashing_tab).to.equal(
+        "close",
       );
-      await events.next(browser.tabs.onHighlighted); // un-highlight current tab
-      await events.next(browser.tabs.onCreated);
-      await events.next(browser.tabs.onActivated);
-      await events.next(browser.tabs.onHighlighted);
-      await events.nextN(browser.tabs.onUpdated, 4);
-
-      const win = await browser.tabs.query({windowId: env.windows.left.id});
-      expect(
-        win.map(({id, url, active, hidden}) => ({id, url, active, hidden})),
-      ).to.deep.equal([
-        {
-          id: env.tabs.left_alice.id,
-          url: `${B}#alice`,
-          active: false,
-          hidden: true,
-        },
-        {
-          id: env.tabs.left_betty.id,
-          url: `${B}#betty`,
-          active: false,
-          hidden: true,
-        },
-        {
-          id: env.tabs.left_charlotte.id,
-          url: `${B}#charlotte`,
-          active: false,
-          hidden: true,
-        },
-        {id: win[3].id, url: B, active: true, hidden: undefined},
-      ]);
-
-      expect(
-        env.model.tabs.window(env.windows.left.id)!.children.map(bm => bm.id),
-      ).to.deep.equal([
-        env.tabs.left_alice.id,
-        env.tabs.left_betty.id,
-        env.tabs.left_charlotte.id,
-        win[3].id!,
-      ]);
-      expect(env.model.tabs.tab(env.tabs.left_alice.id)!.hidden).to.be.true;
-      expect(env.model.tabs.tab(env.tabs.left_betty.id)!.hidden).to.be.true;
-      expect(env.model.tabs.tab(env.tabs.left_charlotte.id)!.hidden).to.be.true;
-      expect(env.model.tabs.tab(win[3].id as TabID)).to.deep.include({
-        active: true,
-      });
     });
 
-    it("refocuses away from an active tab that is to be closed", async () => {
-      await env.model.hideOrCloseStashedTabs([
-        env.model.tabs.tab(env.tabs.left_alice.id)!,
+    it("closes tabs", async () => {
+      const p = env.model.hideOrCloseStashedTabs([
+        env.model.tabs.tab(env.tabs.right_doug.id)!,
       ]);
-      await events.next(browser.tabs.onHighlighted); // un-highlight current tab
-      await events.next(browser.tabs.onActivated);
-      await events.next(browser.tabs.onHighlighted);
-      await events.next(browser.tabs.onUpdated); // hidden
+      await events.next(browser.tabs.onRemoved);
+      await p;
 
-      const win = await browser.tabs.query({windowId: env.windows.left.id});
-      expect(
-        win.map(({id, url, active, hidden}) => ({id, url, active, hidden})),
-      ).to.deep.equal([
-        {
-          id: env.tabs.left_alice.id,
-          url: `${B}#alice`,
-          active: false,
-          hidden: true,
-        },
-        {
-          id: env.tabs.left_betty.id,
-          url: `${B}#betty`,
-          active: true,
-          hidden: undefined,
-        },
-        {
-          id: env.tabs.left_charlotte.id,
-          url: `${B}#charlotte`,
-          active: false,
-          hidden: undefined,
-        },
-      ]);
+      await browser.tabs.get(env.tabs.right_doug.id).then(
+        /* c8 ignore next -- bug-checking */
+        () => expect.fail("browser.tabs.get did not throw"),
+        () => {},
+      );
+      expect(env.model.tabs.tab(env.tabs.right_doug.id)).to.be.undefined;
     });
 
-    it("clears any selections on hidden tabs", async () => {
+    it("clears any selections on closed tabs", async () => {
       const tab = env.model.tabs.tab(env.tabs.real_bob.id)!;
       const si = env.model.selection.info(tab);
 
@@ -463,12 +246,9 @@ describe("model", () => {
       expect(tab.highlighted).to.be.true;
 
       const p2 = env.model.hideOrCloseStashedTabs([tab]);
-      await events.next(browser.tabs.onHighlighted);
-      await events.next(browser.tabs.onUpdated);
+      await events.next(browser.tabs.onRemoved);
       await p2;
 
-      expect(tab.hidden).to.be.true;
-      expect(tab.highlighted).to.be.false;
       expect(si.isSelected).to.be.false;
       expect(Array.from(env.model.selection.selectedItems())).to.deep.equal([]);
     });
@@ -892,7 +672,7 @@ describe("model", () => {
         toIndex: 2,
       });
       await events.nextN(browser.bookmarks.onCreated, 2);
-      await events.nextN(browser.tabs.onUpdated, 2);
+      await events.nextN(browser.tabs.onRemoved, 2);
       await p;
 
       const titles = [
@@ -912,8 +692,8 @@ describe("model", () => {
         `${B}#nate`,
       ];
 
-      expect(env.model.tabs.tab(env.tabs.real_bob.id)!.hidden).to.be.true;
-      expect(env.model.tabs.tab(env.tabs.real_estelle.id)!.hidden).to.be.true;
+      expect(env.model.tabs.tab(env.tabs.real_bob.id)).to.be.undefined;
+      expect(env.model.tabs.tab(env.tabs.real_estelle.id)).to.be.undefined;
 
       const real_folder = await browser.bookmarks.getChildren(
         env.bookmarks.names.id,
@@ -951,7 +731,7 @@ describe("model", () => {
       });
       await events.nextN(browser.bookmarks.onCreated, 2);
       await events.nextN(browser.bookmarks.onMoved, 2);
-      await events.nextN(browser.tabs.onUpdated, 2);
+      await events.nextN(browser.tabs.onRemoved, 2);
       await p;
 
       const titles = [
@@ -975,8 +755,8 @@ describe("model", () => {
         `${B}#nate`,
       ];
 
-      expect(env.model.tabs.tab(env.tabs.real_bob.id)!.hidden).to.be.true;
-      expect(env.model.tabs.tab(env.tabs.real_estelle.id)!.hidden).to.be.true;
+      expect(env.model.tabs.tab(env.tabs.real_bob.id)).to.be.undefined;
+      expect(env.model.tabs.tab(env.tabs.real_estelle.id)).to.be.undefined;
       expect(
         env.model.bookmarks.bookmark(env.bookmarks.two.id)!.position!.parent,
       ).to.equal(env.model.bookmarks.folder(env.bookmarks.names.id));
@@ -1427,7 +1207,7 @@ describe("model", () => {
         toIndex: 2,
       });
       await events.nextN(browser.tabs.onCreated, 2);
-      await events.nextN(browser.tabs.onUpdated, 6);
+      await events.nextN(browser.tabs.onUpdated, 2);
       await p;
 
       const urls = [
@@ -1495,19 +1275,14 @@ describe("model", () => {
 
       const p = env.model.putItemsInWindow({
         items: [
-          env.model.bookmarks.bookmark(env.bookmarks.helen.id)!, // hidden tab
+          env.model.bookmarks.bookmark(env.bookmarks.helen.id)!,
           env.model.bookmarks.bookmark(env.bookmarks.nate.id)!, // not open
         ],
         toWindow: env.model.tabs.window(env.windows.right.id)!,
         toIndex: 2,
       });
-      await events.nextN<any>(
-        [browser.tabs.onAttached, browser.tabs.onMoved],
-        1,
-      );
-      await events.nextN(browser.tabs.onUpdated, 1);
-      await events.nextN(browser.tabs.onCreated, 1); // nate created
-      await events.nextN(browser.tabs.onUpdated, 1); // nate loaded
+      await events.nextN(browser.tabs.onCreated, 2);
+      await events.nextN(browser.tabs.onUpdated, 2);
       await events.nextN(browser.bookmarks.onRemoved, 2);
       const res = await p;
 
@@ -1522,7 +1297,7 @@ describe("model", () => {
       const ids = [
         env.tabs.right_blank.id,
         env.tabs.right_adam.id,
-        env.tabs.real_helen.id,
+        res[0].id,
         res[1].id,
         env.tabs.right_doug.id,
       ];
@@ -1557,10 +1332,10 @@ describe("model", () => {
 
       expect(env.model.tabs.tab(env.tabs.real_helen.id)).to.deep.include({
         position: {
-          parent: env.model.tabs.window(env.windows.right.id),
-          index: 2,
+          parent: env.model.tabs.window(env.windows.real.id),
+          index: 10,
         },
-        hidden: false,
+        hidden: true,
       });
 
       // We should get some deleted items since we moved bookmarks out
@@ -1623,62 +1398,6 @@ describe("model", () => {
         url: env.bookmarks.nate.url,
       });
     });
-
-    it("moves bookmarks with hidden tabs into the window (backward)", async () => {
-      await env.model.bookmarks.loadedStash();
-      const p = env.model.putItemsInWindow({
-        items: [env.model.bookmarks.bookmark(env.bookmarks.helen.id)!],
-        toWindow: env.model.tabs.window(env.windows.real.id)!,
-        toIndex: 9,
-      });
-      await events.next(browser.tabs.onMoved);
-      await events.next(browser.tabs.onUpdated);
-      await events.next(browser.bookmarks.onRemoved);
-      await events.next("KVS.Memory.onSet");
-      await p;
-
-      await check_window("real", [
-        "real_patricia",
-        "real_paul",
-        "real_blank",
-        "real_bob",
-        "real_doug",
-        "real_doug_2",
-        "real_estelle",
-        "real_francis",
-        "real_harry",
-        "real_helen",
-        "real_unstashed",
-      ]);
-    });
-
-    it("moves bookmarks with hidden tabs into the window (forward)", async () => {
-      await env.model.bookmarks.loadedStash();
-      const p = env.model.putItemsInWindow({
-        items: [env.model.bookmarks.bookmark(env.bookmarks.doug_2.id)!],
-        toWindow: env.model.tabs.window(env.windows.real.id)!,
-        toIndex: 9,
-      });
-      await events.next(browser.tabs.onMoved);
-      await events.next(browser.tabs.onUpdated);
-      await events.next(browser.bookmarks.onRemoved);
-      await events.next("KVS.Memory.onSet");
-      await p;
-
-      await check_window("real", [
-        "real_patricia",
-        "real_paul",
-        "real_blank",
-        "real_bob",
-        "real_doug",
-        "real_estelle",
-        "real_francis",
-        "real_harry",
-        "real_doug_2",
-        "real_unstashed",
-        "real_helen",
-      ]);
-    });
   });
 
   describe("restores tabs", () => {
@@ -1689,24 +1408,23 @@ describe("model", () => {
       expect(env.model.tabs.activeTab()!.url).to.equal(B);
     });
 
-    it("restores a single hidden tab", async () => {
+    it("creates a new tab when the only matching tab is hidden", async () => {
       const p = env.model.restoreTabs([{url: `${B}#harry`}], {});
-      await events.next(browser.tabs.onMoved);
+      const created = (await events.next(browser.tabs.onCreated))[0];
       await events.next(browser.tabs.onUpdated);
       await events.next(browser.tabs.onActivated);
       await events.next(browser.tabs.onHighlighted);
-      await events.next(browser.tabs.onRemoved); // closing new-tab page
       await p;
+      await events.next(browser.tabs.onRemoved); // closing new-tab page
 
-      const restored = env.model.tabs.tab(env.tabs.real_harry.id)!;
+      const restored = env.model.tabs.tab(created.id!)!;
       expect(restored.hidden).to.be.false;
       expect(restored.active).to.be.true;
       expect(restored.position?.parent.id).to.equal(env.windows.real.id);
+      expect(env.model.tabs.tab(env.tabs.real_harry.id)!.hidden).to.be.true;
 
       const win = env.model.tabs.window(env.windows.real.id)!;
-      expect(win.children[win.children.length - 1].id).to.equal(
-        env.tabs.real_harry.id,
-      );
+      expect(win.children[win.children.length - 1].id).to.equal(created.id);
     });
 
     it("restores a single already-open tab by switching to it", async () => {
@@ -1731,15 +1449,19 @@ describe("model", () => {
         [{url: `${B}#harry`}, {url: `${B}#new-restored`}],
         {},
       );
-      await events.next(browser.tabs.onMoved);
+      const new_harry = (await events.next(browser.tabs.onCreated))[0];
       await events.next(browser.tabs.onUpdated);
-      await events.next(browser.tabs.onCreated);
+      const new_restored = (await events.next(browser.tabs.onCreated))[0];
       await events.next(browser.tabs.onUpdated);
       await events.next(browser.tabs.onActivated);
       await events.next(browser.tabs.onHighlighted);
       const restored = await p;
       await events.next(browser.tabs.onRemoved); // closing new-tab page
 
+      expect(restored.map(t => t.id)).to.deep.equal([
+        new_harry.id,
+        new_restored.id,
+      ]);
       expect(restored[0].hidden).to.be.false;
       expect(restored[0].active).to.be.false;
       expect(restored[1].hidden).to.be.false;
@@ -1754,10 +1476,11 @@ describe("model", () => {
         env.tabs.real_doug_2.id,
         env.tabs.real_estelle.id,
         env.tabs.real_francis.id,
+        env.tabs.real_harry.id,
         env.tabs.real_unstashed.id,
         env.tabs.real_helen.id,
-        env.tabs.real_harry.id,
-        restored[1].id,
+        new_harry.id,
+        new_restored.id,
       ]);
     });
 
@@ -1768,14 +1491,15 @@ describe("model", () => {
         ),
         {},
       );
-      await events.next(browser.tabs.onMoved);
+      const new_harry = (await events.next(browser.tabs.onCreated))[0];
       await events.next(browser.tabs.onUpdated);
       await events.next(browser.tabs.onMoved);
-      await events.next(browser.tabs.onUpdated);
       const new_betty = (await events.next(browser.tabs.onCreated))[0];
-      await events.next(browser.tabs.onMoved);
+      await events.next(browser.tabs.onUpdated);
+      const new_doug = (await events.next(browser.tabs.onCreated))[0];
+      await events.next(browser.tabs.onUpdated);
       const new_paul = (await events.next(browser.tabs.onCreated))[0];
-      await events.nextN(browser.tabs.onUpdated, 2);
+      await events.next(browser.tabs.onUpdated);
       await events.next(browser.tabs.onActivated);
       await events.next(browser.tabs.onHighlighted);
       const restored = await p;
@@ -1783,10 +1507,10 @@ describe("model", () => {
 
       expect(restored).to.deep.equal(
         [
-          env.tabs.real_harry.id,
-          env.tabs.real_doug_2.id,
-          new_betty.id as TabID,
+          new_harry.id as TabID,
           env.tabs.real_doug.id,
+          new_betty.id as TabID,
+          new_doug.id as TabID,
           new_paul.id as TabID,
         ].map(id => env.model.tabs.tab(id)),
       );
@@ -1811,14 +1535,16 @@ describe("model", () => {
         env.tabs.real_patricia.id,
         env.tabs.real_paul.id,
         env.tabs.real_bob.id,
+        env.tabs.real_doug_2.id,
         env.tabs.real_estelle.id,
         env.tabs.real_francis.id,
+        env.tabs.real_harry.id,
         env.tabs.real_unstashed.id,
         env.tabs.real_helen.id,
-        env.tabs.real_harry.id,
-        env.tabs.real_doug_2.id,
-        new_betty.id,
+        new_harry.id,
         env.tabs.real_doug.id,
+        new_betty.id,
+        new_doug.id,
         new_paul.id,
       ]);
     });

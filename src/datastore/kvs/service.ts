@@ -21,8 +21,14 @@ export default class Service<K extends Proto.Key, V extends Proto.Value>
   ): Promise<Service<K, V>> {
     // Magical incantation to make sure the browser doesn't spontaneously
     // delete our store.
-    if (!(await navigator.storage.persisted())) {
-      await navigator.storage.persist();
+    if (
+      navigator.storage &&
+      typeof navigator.storage.persisted === "function" &&
+      typeof navigator.storage.persist === "function"
+    ) {
+      if (!(await navigator.storage.persisted())) {
+        await navigator.storage.persist();
+      }
     }
 
     return new Service(

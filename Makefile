@@ -26,7 +26,7 @@ DIST_PKG = $(RELEASE_DIR)/$(PACKAGE)-$(FULL_VERSION).zip
 # automatically fixed.
 debug:
 	$(MAKE) check-types
-	$(MAKE) build-dbg build-chrome-dbg
+	$(MAKE) build-dbg
 	$(MAKE) check-tests
 	$(MAKE) check-style || ( $(MAKE) fix-style && $(MAKE) debug )
 .PHONY: debug
@@ -76,7 +76,7 @@ rel-inner:
 	@echo "Source package:  $(SRC_PKG)"
 	@echo
 	@echo "If everything looks good, run \"git push && git push --tags\", and"
-	@echo "upload to AMO."
+	@echo "upload the release package."
 	@echo ""
 .PHONY: rel-inner
 
@@ -122,12 +122,6 @@ clean-working-tree:
 
 ## Build
 
-build-chrome-dbg: build-dbg
-	rsync -aHvx --delete --force dist/ dist-chrome/
-	cp assets/manifest.json dist-chrome/
-	patch --no-backup-if-mismatch dist-chrome/manifest.json chrome-manifest.patch
-.PHONY: build-chrome-dbg
-
 build-dbg: node_modules icons dist/tab-stash.css
 	NODE_ENV=development ./node_modules/.bin/vite build -c vite.config.html.ts -m development
 	NODE_ENV=development ./node_modules/.bin/vite build -c vite.config.lib.ts -m development
@@ -141,7 +135,6 @@ build-rel:
 	NODE_ENV=production ./node_modules/.bin/vite build -c vite.config.html.ts -m production
 	NODE_ENV=production ./node_modules/.bin/vite build -c vite.config.lib.ts -m production
 	./node_modules/.bin/copyfiles -u 1 'assets/**/*' dist
-	./node_modules/.bin/web-ext lint -s dist -i 'test.*'
 .PHONY: build-rel
 
 node_modules: package-lock.json
@@ -212,5 +205,5 @@ distclean: clean
 .PHONY: distclean
 
 clean:
-	rm -rf build.test dist dist-chrome docs/_site coverage
+	rm -rf build.test dist docs/_site coverage
 .PHONY: clean

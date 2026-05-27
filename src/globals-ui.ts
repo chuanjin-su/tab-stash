@@ -31,7 +31,7 @@ const the = {
   model: undefined! as M.Model,
 
   /** The UI form factor. */
-  view: "tab" as "tab" | "popup" | "sidebar",
+  view: "tab" as "tab" | "popup" | "side_panel",
 
   /** Flags to enable/disable debug tracing. */
   tracersEnabled: tracersEnabled,
@@ -46,9 +46,14 @@ export async function initTheGlobals() {
   // Figure out which form factor we're running in.
   switch (the.searchParams.get("view")) {
     case "popup":
+      the.view = "popup";
+      break;
     case "sidebar":
+      the.view = "side_panel";
+      break;
+    case "side_panel":
     case "tab":
-      the.view = the.searchParams.get("view") as "tab" | "popup" | "sidebar";
+      the.view = the.searchParams.get("view") as "tab" | "popup" | "side_panel";
       break;
   }
 

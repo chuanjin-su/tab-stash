@@ -11,7 +11,7 @@ import * as events from "../events.js";
 type Window = Omit<W.Window, "id" | "tabs"> & {id: number; tabs: Tab[]};
 type Tab = Omit<T.Tab, "id" | "windowId"> & {id: number; windowId: number};
 
-// Exported because it's also used by the sessions mock
+// Shared mutable state for the tabs/windows mock.
 export class State {
   readonly onWindowCreated: events.MockEvent<(window: W.Window) => void>;
   readonly onWindowRemoved: events.MockEvent<(windowId: number) => void>;

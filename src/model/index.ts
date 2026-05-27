@@ -37,10 +37,8 @@ import {trace_fn} from "../util/debug.js";
 import {
   backingOff,
   filterMap,
-  shortPoll,
   TaskMonitor,
   textMatcher,
-  tryAgain,
   urlToOpen,
   urlToStash,
 } from "../util/index.js";
@@ -418,8 +416,6 @@ export class Model {
         id === BookmarkMetadata.CUR_WINDOW_MD_ID ||
         !!this.bookmarks.node(id as Bookmarks.NodeID),
     );
-
-    await this.closeOrphanedHiddenTabs();
   }
 
   /** Stashes all eligible tabs in the specified window, leaving the existing
@@ -478,30 +474,10 @@ export class Model {
     await this.putSelectedIn(options);
   }
 
-  /** Hide/discard/close the specified tabs, according to the user's settings
-   * for what to do with stashed tabs.  Creates a new tab if necessary to keep
-   * the browser window(s) open. */
+  /** Close the specified tabs after stashing. */
   async hideOrCloseStashedTabs(tabs: Tabs.Tab[]): Promise<void> {
-    // Clear any highlights/selections on tabs we are stashing
-    if (!!browser.tabs.hide) {
-      await Promise.all(
-        tabs.map(t => browser.tabs.update(t.id, {highlighted: false}).catch(() => {})),
-      );
-    }
     for (const t of tabs) this.selection.info(t).isSelected = false;
-
-    switch (this.options.local.state.after_stashing_tab) {
-      case "hide_discard":
-        await this.tabs.hide(tabs, "discard");
-        break;
-      case "close":
-        await this.tabs.remove(tabs);
-        break;
-      case "hide":
-      default:
-        await this.tabs.hide(tabs);
-        break;
-    }
+    await this.tabs.remove(tabs);
   }
 
   /** Opens the main Tab Stash UI. Has all the semantics of restoreTabs(), but
@@ -820,21 +796,6 @@ export class Model {
 
     const items = options.items;
 
-    // We want to know what tabs were recently closed, so we can
-    // restore/un-hide tabs as appropriate.
-    //
-    // TODO Unit tests don't support sessions yet
-    //
-    // TODO Known to be buggy on some Firefoxen, see #188.  If nobody
-    // complains, probably this whole path should just be removed.
-    //
-    /* c8 ignore next -- as above */
-    const closed_tabs =
-      !!browser.sessions?.getRecentlyClosed &&
-      this.options.local.state.ff_restore_closed_tabs
-        ? await browser.sessions.getRecentlyClosed()
-        : [];
-
     if (options.task) options.task.max = items.length + 1;
 
     // Keep track of which tabs we are moving/have already stolen.  A tab
@@ -911,21 +872,17 @@ export class Model {
           t =>
             !dont_steal_tabs.has(t.id) &&
             !t.pinned &&
-            (t.hidden || t.position?.parent === win),
+            !t.hidden &&
+            t.position?.parent === win,
         )
-        .sort((a, b) => -a.hidden - -b.hidden); // prefer hidden tabs
+        .sort((a, b) => a.position!.index - b.position!.index);
       if (already_open.length > 0) {
         const t = already_open[0];
         const pos = t.position;
         // console.log('already-open tab: ', t, pos);
         // console.log('existing layout:', this.tabs.window(t.windowId)?.tabs);
 
-        // First move the tab into place, and then show it (if hidden).
-        // If we show and then move, it will briefly appear in a random
-        // location before moving to the desired location, so doing the
-        // move first reduces flickering in the UI.
         await this.tabs.move(t, win, to_index);
-        if (t.hidden && !!browser.tabs.show) await this.tabs.show(t);
 
         // console.log('new layout:', this.tabs.window(t.windowId)?.tabs);
 
@@ -935,39 +892,6 @@ export class Model {
         this.selection.info(t).isSelected =
           isModelItem(item) && this.selection.info(item).isSelected;
         // console.log('moved already-open tab', t);
-        continue;
-      }
-
-      // If we don't have a tab to move, let's see if a tab was recently
-      // closed that we can restore.
-      const closed = filterMap(closed_tabs, s => s.tab).find(
-        tabLookingAtP(url),
-      );
-      /* c8 ignore next - per Firefox bug noted above, see #188 */
-      if (closed) {
-        console.log(`Restoring recently-closed tab for URL: ${url}`, closed);
-        // Remember the active tab in this window (if any), because
-        // restoring a recently-closed tab will disturb the focus.
-        const active_tab = win.children.find(t => t.active);
-
-        const t = (await browser.sessions.restore(closed.sessionId!)).tab!;
-        await browser.tabs.move(t.id!, {windowId: win.id, index: to_index});
-
-        // Reset the focus to the previously-active tab. (We do this
-        // immediately, inside the loop, so as to minimize any
-        // flickering the user might see.)
-        if (active_tab) {
-          await browser.tabs.update(active_tab.id, {active: true});
-        }
-
-        const tab = await shortPoll(
-          () => this.tabs.tab(t.id as Tabs.TabID) || tryAgain(),
-        );
-        moved_items.push(tab);
-        dont_steal_tabs.add(tab.id);
-        this.selection.info(tab).isSelected =
-          isModelItem(item) && this.selection.info(item).isSelected;
-        // console.log('restored recently-closed tab', tab);
         continue;
       }
 
@@ -1163,49 +1087,6 @@ export class Model {
     await di.drop(deletion.key, path);
   }
 
-  /** Closes any hidden tabs that were originally hidden by Tab Stash, but are
-   * no longer present as bookmarks in the stash. */
-  async closeOrphanedHiddenTabs() {
-    if (!browser.tabs.hide) return;
-    const now = Date.now();
-    const tabs = await browser.tabs.query({hidden: true});
-
-    // Required so we actually know which tabs have URLs in the stash.
-    await this.bookmarks.loadedStash();
-
-    const our_hidden_tabs = await Promise.allSettled(
-      tabs.map(async bt => {
-        const mt = this.tabs.tab(bt.id!)!;
-        const hidden_by_us = await this.tabs.wasTabHiddenByUs(mt);
-        return {tab: mt, atime: bt.lastAccessed, hidden_by_us};
-      }),
-    );
-
-    const tab_ids_to_close = filterMap(our_hidden_tabs, res => {
-      // If we couldn't figure out whether the tab was hidden by us or not, OR
-      // if we can tell the tab was NOT hidden by us, leave it alone.
-      if (res.status !== "fulfilled") return undefined;
-      if (res.value.tab.id === undefined) return undefined;
-      if (!res.value.hidden_by_us) return undefined;
-
-      // If the tab was very recently accessed, we should ignore it; we might be
-      // in the midst of stashing it right now (and it's possible the bookmark
-      // hasn't been created yet).
-      if (res.value.atime && res.value.atime > now - 2000) {
-        return undefined;
-      }
-
-      // If there is a URL in the stash matching the tab's URL, we know this
-      // tab is still in the stash and cannot be closed.
-      if (this.bookmarks.isURLLoadedInStash(res.value.tab.url!)) {
-        return undefined;
-      }
-      return res.value.tab.id;
-    });
-
-    await browser.tabs.remove(tab_ids_to_close);
-  }
-
   //
   // Test-only code
   //
@@ -1293,24 +1174,4 @@ export function copying(items: StashItem[]): (NewTab | NewFolder)[] {
       // Separators are excluded
     }
   });
-}
-
-//
-// Private helper functions
-//
-
-/** Returns a function which returns true if a tab is looking at a particular
- * URL, taking into account any transformations done by urlToOpen(). */
-function tabLookingAtP(url: string): (t?: {url?: string}) => boolean {
-  const open_url = urlToOpen(url);
-  return (t?: {url?: string}) => {
-    if (!t || !t.url) return false;
-    const to_url = urlToOpen(t.url);
-    return (
-      t.url === url ||
-      t.url === open_url ||
-      to_url === url ||
-      to_url === open_url
-    );
-  };
 }

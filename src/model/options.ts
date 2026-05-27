@@ -7,8 +7,6 @@
 // and will break if it's not true.)
 
 import {computed, ref} from "vue";
-import browser from "webextension-polyfill";
-
 import stored_object, {
   aBoolean,
   anEnum,
@@ -16,12 +14,25 @@ import stored_object, {
   aString,
   maybeUndef,
   type StoredObject,
+  type StorableType,
 } from "../datastore/stored-object.js";
 import {resolveNamed} from "../util/index.js";
 import {errorLog, UserError} from "../util/oops.js";
 
-export const SHOW_WHAT_OPT = anEnum("sidebar", "tab", "popup", "none");
+export const SHOW_WHAT_OPT: StorableType<
+  "side_panel" | "tab" | "popup" | "none"
+> = (value, fallback) => {
+  if (value === "sidebar") return "side_panel";
+  return anEnum("side_panel", "tab", "popup", "none")(value, fallback);
+};
 export const STASH_WHAT_OPT = anEnum("all", "single", "none");
+export const AFTER_STASHING_TAB_OPT: StorableType<"close"> = (
+  value,
+  fallback,
+) => {
+  if (value === "hide" || value === "hide_discard") return "close";
+  return anEnum("close")(value, fallback);
+};
 export type ShowWhatOpt = ReturnType<typeof SHOW_WHAT_OPT>;
 export type StashWhatOpt = ReturnType<typeof STASH_WHAT_OPT>;
 export type Capability = "available" | "disabled" | "not-supported";
@@ -32,8 +43,8 @@ export const SYNC_DEF = {
   // Should we show advanced settings to the user?
   meta_show_advanced: {default: false, is: aBoolean},
 
-  // When the user stashes from the context menu or address bar button, do we
-  // show the "sidebar", "tab", or "none" (of the above)?
+  // When the user stashes from the context menu, do we show the "side_panel",
+  // "tab", or "none"?
   open_stash_in: {
     default: undefined,
     is: maybeUndef(SHOW_WHAT_OPT),
@@ -96,22 +107,11 @@ export const LOCAL_DEF = {
     is: maybeUndef(aString),
   },
 
-  // What should we do with a tab once it's been stashed?  'hide' it,
-  // 'hide_discard' it or 'close' it?
+  // What should we do with a tab once it's been stashed?
   after_stashing_tab: {
-    default: "hide",
-    is: anEnum("hide", "hide_discard", "close"),
+    default: "close",
+    is: AFTER_STASHING_TAB_OPT,
   },
-
-  // If we 'hide' stashed tabs, should we discard() them if they haven't
-  // been used in a while?
-  autodiscard_hidden_tabs: {default: true, is: aBoolean},
-
-  // Parameters that dictate how aggressive autodiscard_hidden_tabs is.
-  autodiscard_interval_min: {default: 2, is: aNumber},
-  autodiscard_min_keep_tabs: {default: 10, is: aNumber},
-  autodiscard_target_tab_count: {default: 50, is: aNumber},
-  autodiscard_target_age_min: {default: 10, is: aNumber},
 
   /** Whether or not to load restored tabs immediately or wait for the user to
    * click on them.  (That is, should newly-opened tabs be discarded or not?) */
@@ -133,20 +133,8 @@ export const LOCAL_DEF = {
     is: anEnum("html-links", "url-list", "markdown", "one-tab"),
   },
 
-  // Feature flags
-
-  /** Re-open a recently-closed tab if one can't be found.  Disabled by
-   * default because of bugs in Firefox.  See #188. */
-  ff_restore_closed_tabs: {default: false, is: aBoolean},
-
-  /** Container color indicators. Related issue: #125 */
-  // ff_container_indicators: {default: false, is: aBoolean},
-
-  // Migration flags
-
-  /** Tracks whether we have marked hidden tabs in the session store as
-   * belonging to Tab Stash. */
-  migrated_tab_markers_applied: {default: false, is: aBoolean},
+  // Migration flags are intentionally left here so stale local options can be
+  // dropped by the StoredObject schema as Chromium-only defaults evolve.
 } as const;
 
 /** The name of a supported export format. */
@@ -193,9 +181,9 @@ export class Model {
     );
   });
 
-  /** Is the Firefox sidebar supported? */
-  hasSidebar(): boolean {
-    return !!browser.sidebarAction;
+  /** Is the Chrome side panel supported? */
+  hasSidePanel(): boolean {
+    return true;
   }
 
   /** Based on the current settings, what can the toolbar stash? */
@@ -212,8 +200,6 @@ export class Model {
 
   /** Based on the current settings, what UIs can the browser show? */
   canBrowserActionShow(what: ShowWhatOpt): boolean {
-    if (what === "sidebar" && !browser.sidebarAction) return false;
-
     const browserActionStash = this.sync.state.browser_action_stash;
 
     switch (what) {

@@ -71,11 +71,11 @@ dive into the code:
    - [CSS](https://developer.mozilla.org/en-US/docs/Web/CSS) for making them look
      pretty
 
-3. Learn how [extensions for
-   Firefox](https://extensionworkshop.com/extension-basics/) are put together.
+3. Learn how [Chrome extensions](https://developer.chrome.com/docs/extensions)
+   are put together.
 
 4. Learn about the major libraries and frameworks used in Tab Stash:
-   - [The WebExtension APIs](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API)
+   - [Chrome Extension APIs](https://developer.chrome.com/docs/extensions/reference/api)
      (for interacting with the browser)
    - [Vue.js](https://v3.vuejs.org/) (for creating UI elements)
    - [Less](https://lesscss.org/) (for styling)
@@ -84,7 +84,7 @@ dive into the code:
 
 ### Getting Started
 
-Here's how to get a build with your changes loaded into Firefox so you can try
+Here's how to get a build with your changes loaded into Chromium so you can try
 them out:
 
 1. Clone Tab Stash's source code from
@@ -93,13 +93,14 @@ them out:
 2. Follow the instructions in the [README] to build Tab Stash for development.
    You should see that all the tests are passing.
 
-3. Load your build into Firefox:
-   1. Go to `about:debugging` and click on "This Firefox".
+3. Load your build into Chrome or another Chromium-based browser:
+   1. Go to `chrome://extensions`.
 
-   2. Click "Load Temporary Addon..." and choose the `manifest.json` file in Tab
-      Stash's `dist` directory.
+   2. Enable "Developer mode".
 
-   3. The Tab Stash sidebar and toolbar button should appear.
+   3. Click "Load unpacked" and choose Tab Stash's `dist` directory.
+
+   4. The Tab Stash toolbar button and side panel should be available.
 
 4. Make your changes:
    1. Use your favorite editor (e.g. [Visual Studio Code]) to make your changes.
@@ -107,9 +108,8 @@ them out:
    2. Rebuild Tab Stash and run the unit tests (just run `make`). Be sure the
       tests pass before proceeding.
 
-   3. Use `about:debugging` to reload the extension, and try out your changes.
-      You can also use `about:debugging` to inspect and debug the various
-      components of Tab Stash (background page, UI pages, etc.).
+   3. Use `chrome://extensions` to reload the extension, inspect the service
+      worker, and debug the UI pages.
 
    4. Repeat until you're satisfied with your changes.
 
@@ -158,15 +158,15 @@ the final Tab Stash extension. Let's go on a quick tour:
 4. `src/` is where all the action is---all the TypeScript and Vue.js code that
    makes up Tab Stash lives here. Here are some places to check out to learn
    your way around:
-   1. `src/index.ts` is the main entry point for the background page (the part
-      of Tab Stash that is always loaded in the background). Integrations with
-      the browser (e.g. the context menu, toolbar button, etc.) are all defined
-      here, along with several background tasks Tab Stash needs to perform to
-      keep things running smoothly.
+   1. `src/index.ts` is the main entry point for the MV3 background service
+      worker. Integrations with the browser (e.g. the context menu, toolbar
+      button, etc.) are all defined here, along with background tasks Tab Stash
+      needs to perform to keep things running smoothly.
 
    2. `src/stash-list/index.ts` is the main entry point for the Tab Stash UI.
-      (The same UI is used for all views---sidebar, full page, and popup.) The
-      UI itself is defined in the corresponding `src/stash-list/index.vue` file.
+      (The same UI is used for all views---side panel, full page, and popup.)
+      The UI itself is defined in the corresponding `src/stash-list/index.vue`
+      file.
 
    3. Similarly, there are entry points for the options page, deleted-items
       page, etc. in the `*.html` files in the top level of `src/`. You can find
@@ -177,10 +177,10 @@ the final Tab Stash extension. Let's go on a quick tour:
 
    4. Finally, it's worth checking out `src/globals-ui.ts` and
       `src/service-model.ts`. `globals-ui` constructs the global "model" data
-      structure for the UI, and `service-model` does the same for the background
-      page. These two files together give an "architectural blueprint" for how
-      Tab Stash is organized and how it tracks all the data it needs to do its
-      job.
+      structure for the UI, and `service-model` does the same for the service
+      worker. These two files together give an "architectural blueprint" for
+      how Tab Stash is organized and how it tracks all the data it needs to do
+      its job.
 
       Each of these files refer to various "models" (which live in `src/model/`)
       that track and modify specific things, such as open tabs, bookmarks,
@@ -201,7 +201,7 @@ can inspect the state of the application at runtime:
 - `app`: The Vue application
 
 - `the.model`: The root model (see `src/ui-model.ts` for the UI's root, or
-  `src/service-model.ts` for the background page's root). (There is also
+  `src/service-model.ts` for the service worker's root). (There is also
   `the.version`. Eventually, all stateful globals are expected to move or be
   aliased under `the`, so there is only one true global, for easier
   discoverability.)
@@ -279,8 +279,7 @@ rarely have to think about formatting.
 
 ### Editing Icons
 
-[Inkscape](https://inkscape.org/en/) is the recommended tool. Please be sure to
-follow the Firefox [Photon Design Guide](https://design.firefox.com/photon/).
+[Inkscape](https://inkscape.org/en/) is the recommended tool.
 
 As noted above, icons must be monochromatic or the post-processing done to
 convert icons for light/dark themes will not work well. The post-processing is

@@ -108,8 +108,8 @@ http://example.com/\tasdf
               favIconUrl: "about:favicon",
             });
 
-            // Two status updates, and one update for the favicon
-            await events.nextN(browser.tabs.onUpdated, 3);
+            // One status update, and one update for the favicon
+            await events.nextN(browser.tabs.onUpdated, 2);
             await events.next(browser.tabs.onRemoved);
           })(),
         );

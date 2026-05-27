@@ -57,11 +57,11 @@
           and
           <select id="browser_action_show" v-model="sync.browser_action_show">
             <option
-              v-if="model.hasSidebar()"
-              :disabled="!model.canBrowserActionShow('sidebar')"
-              value="sidebar"
+              v-if="model.hasSidePanel()"
+              :disabled="!model.canBrowserActionShow('side_panel')"
+              value="side_panel"
             >
-              show the stash in the sidebar
+              show the stash in the side panel
             </option>
             <option :disabled="!model.canBrowserActionShow('tab')" value="tab">
               show the stash in a tab
@@ -84,18 +84,18 @@
     </section>
 
     <section>
-      <label>When stashing tabs from the context menu or address bar:</label>
+      <label>When stashing tabs from the context menu:</label>
       <ul>
-        <li v-if="model.hasSidebar()">
-          <label for="open_stash_in_sidebar">
+        <li v-if="model.hasSidePanel()">
+          <label for="open_stash_in_side_panel">
             <input
               type="radio"
               name="open_stash_in"
-              id="open_stash_in_sidebar"
+              id="open_stash_in_side_panel"
               v-model="sync.open_stash_in"
-              value="sidebar"
+              value="side_panel"
             />
-            Show the stash in the sidebar
+            Show the stash in the side panel
           </label>
         </li>
         <li>
@@ -209,134 +209,11 @@
 
     <hr />
 
-    <h4>Tab and Memory Management (This Browser)</h4>
+    <h4>Tab Management (This Browser)</h4>
 
     <section>
       <label>Once a tab has been stashed:</label>
       <ul>
-        <li>
-          <label
-            for="after_stashing_tab_hide"
-            title="Hidden tabs that are still loaded can be restored instantly. They also preserve anything you had entered into the tab and its history (e.g. Back button)."
-          >
-            <input
-              type="radio"
-              name="after_stashing_tab"
-              id="after_stashing_tab_hide"
-              v-model="local.after_stashing_tab"
-              value="hide"
-            />
-            Hide the tab and keep it loaded in the background
-          </label>
-          <ul :class="{disabled: local.after_stashing_tab !== 'hide'}">
-            <li>
-              <label
-                for="autodiscard_hidden_tabs"
-                title="Monitors the total number of tabs in your browser, and if you have a lot of tabs open, unloads hidden tabs that haven't been used recently. This option significantly reduces memory usage and is recommended for most users."
-              >
-                <input
-                  type="checkbox"
-                  name="autodiscard_hidden_tabs"
-                  id="autodiscard_hidden_tabs"
-                  :disabled="local.after_stashing_tab !== 'hide'"
-                  v-model="local.autodiscard_hidden_tabs"
-                />
-                Automatically unload hidden tabs that haven't been used in a
-                while
-              </label>
-            </li>
-            <li>
-              <ul
-                :class="{
-                  advanced: true,
-                  disabled:
-                    local.after_stashing_tab !== 'hide' ||
-                    !local.autodiscard_hidden_tabs,
-                }"
-              >
-                <li>
-                  <label for="autodiscard_interval_min">
-                    Check for old hidden tabs every
-                    <input
-                      type="number"
-                      id="autodiscard_interval_min"
-                      :disabled="
-                        local.after_stashing_tab !== 'hide' ||
-                        !local.autodiscard_hidden_tabs
-                      "
-                      v-model="local.autodiscard_interval_min"
-                      min="1"
-                    />
-                    minutes
-                  </label>
-                </li>
-                <li>
-                  <label for="autodiscard_min_keep_tabs">
-                    Keep at least
-                    <input
-                      type="number"
-                      id="autodiscard_min_keep_tabs"
-                      :disabled="
-                        local.after_stashing_tab !== 'hide' ||
-                        !local.autodiscard_hidden_tabs
-                      "
-                      v-model="local.autodiscard_min_keep_tabs"
-                      min="0"
-                    />
-                    hidden and visible tabs loaded at all times
-                  </label>
-                </li>
-                <li>
-                  <label for="autodiscard_target_age_min">
-                    Keep the oldest tabs loaded for at least
-                    <input
-                      type="number"
-                      id="autodiscard_target_age_min"
-                      :disabled="
-                        local.after_stashing_tab !== 'hide' ||
-                        !local.autodiscard_hidden_tabs
-                      "
-                      v-model="local.autodiscard_target_age_min"
-                      min="1"
-                    />
-                    minutes, but...
-                  </label>
-                </li>
-                <li>
-                  <label for="autodiscard_target_tab_count">
-                    ...unload tabs more aggressively if there are more than
-                    <input
-                      type="number"
-                      id="autodiscard_target_tab_count"
-                      :disabled="
-                        local.after_stashing_tab !== 'hide' ||
-                        !local.autodiscard_hidden_tabs
-                      "
-                      v-model="local.autodiscard_target_tab_count"
-                      :min="local.autodiscard_min_keep_tabs"
-                    />
-                    tabs loaded
-                  </label>
-                </li>
-              </ul>
-            </li>
-          </ul>
-        </li>
-        <li>
-          <label
-            for="after_stashing_tab_hide_discard"
-            title="Hidden tabs that are unloaded can be restored very quickly, and usually without a network connection. They also preserve browsing history (e.g. Back button). However, depending on the website, you may lose anything you had entered into the tab that isn't already saved. Uses less memory."
-          >
-            <input
-              type="radio"
-              name="after_stashing_tab"
-              id="after_stashing_tab_hide_discard"
-              v-model="local.after_stashing_tab"
-              value="hide_discard"
-            />
-            Hide the tab and immediately unload it
-          </label>
-        </li>
         <li>
           <label
             for="after_stashing_tab_close"
@@ -399,42 +276,6 @@
         </label>
       </li>
     </section>
-
-    <hr v-if="sync.meta_show_advanced" />
-
-    <section class="advanced">
-      <h4>Experimental Features</h4>
-
-      <p>
-        <em
-          ><b>WARNING:</b> Turning on experimental features may break Tab Stash
-          or cause data loss! They are "experimental" because they are still in
-          development and/or there may be known issues. Experimental features
-          may change significantly or be removed entirely in future
-          versions.</em
-        >
-      </p>
-
-      <p>
-        <em
-          >To provide feedback or report a problem with a feature, leave a
-          comment on the issue linked in [brackets] below.</em
-        >
-      </p>
-
-      <FeatureFlag
-        name="ff_restore_closed_tabs"
-        v-model="local.ff_restore_closed_tabs"
-        :default_value="local_def().ff_restore_closed_tabs.default"
-        :issue="200"
-      >
-        <template v-slot:summary>Restore Recently-Closed Tabs</template>
-        When restoring tabs, if a hidden tab isn't available, search for and
-        re-open recently-closed tabs with matching URLs. (NOTE: This is known to
-        occasionally restore incorrect tabs on certain versions of Firefox,
-        check the linked issue for more details.)
-      </FeatureFlag>
-    </section>
   </main>
 </template>
 
@@ -451,7 +292,6 @@ import {required} from "../util/index.js";
 import {logErrorsFrom} from "../util/oops.js";
 
 import OopsNotification from "../components/oops-notification.vue";
-import FeatureFlag from "./feature-flag.vue";
 
 function prop<
   M extends Options.SyncModel | Options.LocalModel,
@@ -484,7 +324,7 @@ function options(model: Options.Model): {
 }
 
 export default defineComponent({
-  components: {FeatureFlag, OopsNotification},
+  components: {OopsNotification},
 
   props: {
     model: required(Object as PropType<Options.Model>),
@@ -539,13 +379,6 @@ export default defineComponent({
   },
 
   methods: {
-    local_def() {
-      return Options.LOCAL_DEF;
-    },
-    sync_def() {
-      return Options.SYNC_DEF;
-    },
-
     showCrashReports() {
       logErrorsFrom(() =>
         this.model.local.set({hide_crash_reports_until: undefined}),

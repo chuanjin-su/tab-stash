@@ -77,16 +77,16 @@
 
       <p>
         <label
-          v-if="options.hasSidebar()"
-          :class="{disabled: !options.canBrowserActionShow('sidebar')}"
+          v-if="options.hasSidePanel()"
+          :class="{disabled: !options.canBrowserActionShow('side_panel')}"
           ><input
             type="radio"
             name="browser_action_show"
-            value="sidebar"
+            value="side_panel"
             v-model="browser_action_show"
-            :disabled="!options.canBrowserActionShow('sidebar')"
+            :disabled="!options.canBrowserActionShow('side_panel')"
           />
-          Show my stashed tabs in the sidebar</label
+          Show my stashed tabs in the side panel</label
         >
       </p>
       <p>
@@ -138,18 +138,17 @@
       <p>
         <span class="icon icon-stash-one" />
 
-        If you stash a tab using the address bar or context menu, what do you
-        want to see?
+        If you stash a tab using the context menu, what do you want to see?
       </p>
 
-      <p v-if="options.hasSidebar()">
+      <p v-if="options.hasSidePanel()">
         <label
           ><input
             type="radio"
             name="open_stash_in"
-            value="sidebar"
+            value="side_panel"
             v-model="open_stash_in"
-          />Show my stashed tabs in the sidebar</label
+          />Show my stashed tabs in the side panel</label
         >
       </p>
       <p>
