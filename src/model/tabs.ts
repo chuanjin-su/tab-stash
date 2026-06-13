@@ -294,6 +294,27 @@ export class Model {
   async remove(tabs: Tab[]): Promise<void> {
     const tids = tabs.map(t => t.id);
     trace("removing tabs", tids);
+
+    for (const active_tab of tabs.filter(t => t.active)) {
+      const pos = expect(
+        active_tab.position,
+        () => `Couldn't find position of active tab ${active_tab.id}`,
+      );
+      const win = pos.parent;
+      const visible_tabs = win.children.filter(t => !t.hidden && !t.pinned);
+      const closing_tabs_in_window = tabs.filter(
+        t => t.position?.parent === active_tab.position?.parent,
+      );
+
+      if (closing_tabs_in_window.length >= visible_tabs.length) {
+        // Create a replacement tab so Chrome doesn't close the window when all
+        // visible tabs are removed.  Keep it inactive until removal finishes so
+        // the popup/side-panel action can continue running.
+        trace("creating new empty tab in window", win.id);
+        await browser.tabs.create({active: false, windowId: win.id});
+      }
+    }
+
     try {
       await browser.tabs.remove(tids);
     } catch (e) {
